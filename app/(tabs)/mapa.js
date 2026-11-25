@@ -21,7 +21,6 @@ import {
 import {
     getRefugiosParaMapa,
     normalizarTelefonoWhatsApp,
-    UBICACION_DEFAULT,
 } from '../../services/refugios';
 
 const colors = {
@@ -35,10 +34,11 @@ const colors = {
 };
 
 export default function MapaAdoptante() {
-    const [region, setRegion] = useState(UBICACION_DEFAULT);
+    const [region, setRegion] = useState(null);
     const [refugios, setRefugios] = useState([]);
     const [seleccionado, setSeleccionado] = useState(null);
     const [cargando, setCargando] = useState(true);
+    const [errorCarga, setErrorCarga] = useState('');
     const [mapWidth, setMapWidth] = useState(360);
     const [mapFallo, setMapFallo] = useState(false);
 
@@ -52,7 +52,16 @@ export default function MapaAdoptante() {
                     setRefugios(lista);
                     if (lista.length) setSeleccionado(lista[0]);
                 }
+            } catch (error) {
+                console.log('Error al cargar refugios del mapa:', error);
+                if (activo) {
+                    setErrorCarga(
+                        error?.message || 'No se pudo cargar el mapa.'
+                    );
+                }
+            }
 
+            try {
                 const { status } =
                     await Location.requestForegroundPermissionsAsync();
 
@@ -69,12 +78,9 @@ export default function MapaAdoptante() {
                             longitudeDelta: 0.06,
                         });
                     }
-                } else if (activo) {
-                    setRegion(UBICACION_DEFAULT);
                 }
             } catch (error) {
-                console.log('Error al cargar mapa:', error);
-                if (activo) setRegion(UBICACION_DEFAULT);
+                console.log('Ubicación del dispositivo no disponible:', error);
             } finally {
                 if (activo) setCargando(false);
             }
@@ -87,27 +93,19 @@ export default function MapaAdoptante() {
         };
     }, []);
 
-    const centro = seleccionado
-        ? {
-              latitude: seleccionado.latitude,
-              longitude: seleccionado.longitude,
-          }
-        : {
-              latitude: region.latitude,
-              longitude: region.longitude,
-          };
+    const centroLat = seleccionado?.latitude ?? region?.latitude ?? null;
+    const centroLng = seleccionado?.longitude ?? region?.longitude ?? null;
+    const centro =
+        typeof centroLat === 'number' && typeof centroLng === 'number'
+            ? { latitude: centroLat, longitude: centroLng }
+            : null;
 
-    const mapUri = useMemo(
-        () =>
-            buildStaticMapUrl(
-                centro.latitude,
-                centro.longitude,
-                mapWidth * 2,
-                440,
-                0.03
-            ),
-        [centro.latitude, centro.longitude, mapWidth]
-    );
+    const mapUri = useMemo(() => {
+        if (typeof centroLat !== 'number' || typeof centroLng !== 'number') {
+            return null;
+        }
+        return buildStaticMapUrl(centroLat, centroLng, mapWidth * 2, 440, 0.03);
+    }, [centroLat, centroLng, mapWidth]);
 
     const contactarWhatsApp = async (refugio) => {
         const telefono = normalizarTelefonoWhatsApp(refugio?.telefono);
@@ -156,6 +154,10 @@ export default function MapaAdoptante() {
                 Elegí un refugio de la lista para verlo en el mapa.
             </Text>
 
+            {errorCarga ? (
+                <Text style={styles.errorCarga}>{errorCarga}</Text>
+            ) : null}
+
             <View
                 style={styles.mapCard}
                 onLayout={(e) => {
@@ -163,7 +165,7 @@ export default function MapaAdoptante() {
                     if (w > 0 && Math.abs(w - mapWidth) > 2) setMapWidth(w);
                 }}
             >
-                {!mapFallo ? (
+                {centro && mapUri && !mapFallo ? (
                     <Image
                         key={`mapa-${centro.latitude}-${centro.longitude}-${mapWidth}`}
                         source={{ uri: mapUri }}
@@ -180,28 +182,37 @@ export default function MapaAdoptante() {
                             color={colors.secondary}
                         />
                         <Text style={styles.mapFallbackText}>
-                            No se pudo cargar el mapa
+                            {mapFallo
+                                ? 'No se pudo cargar el mapa'
+                                : 'No hay una ubicación para mostrar'}
                         </Text>
                     </View>
                 )}
 
-                <View pointerEvents="none" style={styles.pinWrap}>
-                    <Ionicons name="location" size={40} color={colors.pin} />
-                </View>
+                {seleccionado ? (
+                    <View pointerEvents="none" style={styles.pinWrap}>
+                        <Ionicons
+                            name="location"
+                            size={40}
+                            color={colors.pin}
+                        />
+                    </View>
+                ) : null}
 
-                <Pressable
-                    style={styles.openMapsBtn}
-                    onPress={() =>
-                        openExternalMap(
-                            centro.latitude,
-                            centro.longitude,
-                            seleccionado?.nombre || 'Mi ubicación'
-                        ).catch(() => {})
-                    }
-                >
-                    <Ionicons name="open-outline" size={16} color="#FFF" />
-                    <Text style={styles.openMapsText}>Abrir en Maps</Text>
-                </Pressable>
+                {centro ? (
+                    <Pressable
+                        style={styles.openMapsBtn}
+                        onPress={() =>
+                            openExternalMap(
+                                centro.latitude,
+                                centro.longitude
+                            ).catch(() => {})
+                        }
+                    >
+                        <Ionicons name="open-outline" size={16} color="#FFF" />
+                        <Text style={styles.openMapsText}>Abrir en Maps</Text>
+                    </Pressable>
+                ) : null}
             </View>
 
             <FlatList
@@ -211,9 +222,8 @@ export default function MapaAdoptante() {
                 contentContainerStyle={styles.listaContent}
                 ListEmptyComponent={
                     <Text style={styles.vacio}>
-                        No hay refugios con ubicación. Cuando un refugio complete
-                        su perfil (dirección) y publique animales, va a aparecer
-                        acá.
+                        No hay refugios con ubicación. Cuando un refugio guarde
+                        su dirección en el perfil, va a aparecer acá.
                     </Text>
                 }
                 renderItem={({ item }) => {
@@ -309,6 +319,12 @@ const styles = StyleSheet.create({
     mensaje: {
         color: colors.secondary,
         fontSize: 16,
+    },
+    errorCarga: {
+        color: '#B85C4E',
+        textAlign: 'center',
+        marginBottom: 8,
+        fontSize: 13,
     },
     mapCard: {
         height: 220,

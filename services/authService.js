@@ -23,7 +23,8 @@ async function persistSession(token, user) {
 
 /**
  * POST /api/users/register
- * Backend espera: nombre, email, password, rol
+ * Backend espera: nombre, email, password, rol y telefono.
+ * El teléfono es obligatorio solo para refugio.
  * Responde: { message, userId, token } (sin user completo)
  */
 export async function registerUser(userData) {
@@ -32,6 +33,7 @@ export async function registerUser(userData) {
         email: userData.email.trim().toLowerCase(),
         password: userData.password,
         rol: userData.rol || 'adoptante',
+        telefono: String(userData.telefono || '').replace(/\D/g, ''),
     };
 
     const data = await apiRequest('/api/users/register', {
@@ -44,7 +46,7 @@ export async function registerUser(userData) {
         nombre: payload.nombre,
         email: payload.email,
         rol: payload.rol,
-        telefono: userData.telefono || '',
+        telefono: payload.telefono,
         ubicacion: userData.ubicacion || userData.direccion || '',
         direccion: userData.direccion || userData.ubicacion || '',
     });
@@ -79,9 +81,20 @@ export async function getCurrentUser() {
     }
 }
 
+/** Sesión válida solo si siguen el token y el usuario. Logout los borra. */
+export async function getStoredSession() {
+    const token = await SecureStore.getItemAsync('authToken');
+    if (!token) return null;
+
+    const user = await getCurrentUser();
+    if (!user?.id) return null;
+
+    return user;
+}
+
 /**
  * Actualiza sesión local + perfil de refugio en API si hay ubicacion/telefono.
- * PUT /api/users/profile solo acepta { ubicacion, telefono } y rol refugio.
+ * PUT /api/users/profile acepta { ubicacion, telefono, latitude, longitude }.
  */
 export async function updateCurrentUser(partial) {
     const current = await getCurrentUser();
@@ -92,7 +105,16 @@ export async function updateCurrentUser(partial) {
 
     const ubicacion =
         partial.ubicacion ?? partial.direccion ?? current.ubicacion ?? '';
-    const telefono = partial.telefono ?? current.telefono ?? '';
+    const telefono = String(partial.telefono ?? current.telefono ?? '').replace(
+        /\D/g,
+        ''
+    );
+    const nombre = String(partial.nombre ?? current.nombre ?? '').trim();
+
+    await apiRequest('/api/users/cuenta', {
+        method: 'PUT',
+        body: JSON.stringify({ nombre, telefono }),
+    });
 
     if (current.rol === 'refugio') {
         if (!ubicacion || !telefono) {
@@ -101,9 +123,23 @@ export async function updateCurrentUser(partial) {
             );
         }
 
+        const latitude = partial.latitude ?? current.latitude;
+        const longitude = partial.longitude ?? current.longitude;
+        const body = { ubicacion, telefono };
+
+        if (
+            typeof latitude === 'number' &&
+            Number.isFinite(latitude) &&
+            typeof longitude === 'number' &&
+            Number.isFinite(longitude)
+        ) {
+            body.latitude = latitude;
+            body.longitude = longitude;
+        }
+
         await apiRequest('/api/users/profile', {
             method: 'PUT',
-            body: JSON.stringify({ ubicacion, telefono }),
+            body: JSON.stringify(body),
         });
     }
 
@@ -111,6 +147,7 @@ export async function updateCurrentUser(partial) {
         ...current,
         ...partial,
         id: current.id,
+        nombre,
         email: current.email,
         rol: current.rol,
         ubicacion,

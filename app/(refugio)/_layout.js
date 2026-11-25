@@ -1,6 +1,8 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useGuardaRol } from '../../components/guardaRol';
+
 const COLORS = {
     primary: '#795548',
     inactive: '#A99A8F',
@@ -8,6 +10,9 @@ const COLORS = {
 };
 
 export default function RefugioTabsLayout() {
+    const guarda = useGuardaRol('refugio');
+    if (guarda) return guarda;
+
     return (
         <Tabs
             initialRouteName="posteos"
@@ -68,7 +73,14 @@ export default function RefugioTabsLayout() {
                 name="nuevo-posteo"
                 options={{
                     href: null,
-                    title: 'Nuevo posteo',
+                    title: 'Publicar animal',
+                }}
+            />
+            <Tabs.Screen
+                name="editar-posteo"
+                options={{
+                    href: null,
+                    title: 'Editar publicación',
                 }}
             />
             <Tabs.Screen

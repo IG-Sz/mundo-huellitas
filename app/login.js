@@ -3,10 +3,7 @@ import { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    KeyboardAvoidingView,
-    Platform,
     Pressable,
-    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -17,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 
 import { loginUser } from '../services/authService';
+import FormularioScroll from '../components/formularioScroll';
+import { useFavoritos } from '../context/favoritosContext';
 
 const colors = {
     primary: '#795548',
@@ -28,6 +27,7 @@ const colors = {
 
 const Login = () => {
     const router = useRouter();
+    const { recargarFavoritos } = useFavoritos();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -51,7 +51,8 @@ const Login = () => {
                 password,
             });
 
-            // El servicio ya guarda el token de autenticación.
+            await recargarFavoritos();
+
             router.replace(
                 result?.user?.rol === 'refugio'
                     ? '/(refugio)/posteos'
@@ -73,15 +74,7 @@ const Login = () => {
             <Stack.Screen options={{ headerShown: false }} />
 
             <SafeAreaView style={styles.container}>
-                <KeyboardAvoidingView
-                    style={{ flex: 1 }}
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                >
-                    <ScrollView
-                        contentContainerStyle={styles.scrollContent}
-                        keyboardShouldPersistTaps="handled"
-                        showsVerticalScrollIndicator={false}
-                    >
+                <FormularioScroll contentContainerStyle={styles.scrollContent}>
                         <View style={styles.header}>
                             <View style={styles.logo}>
                                 <Ionicons
@@ -213,8 +206,7 @@ const Login = () => {
                         <Text style={styles.pie}>
                             Hecho con ❤️ para quienes aman a los animales.
                         </Text>
-                    </ScrollView>
-                </KeyboardAvoidingView>
+                </FormularioScroll>
             </SafeAreaView>
         </>
     );

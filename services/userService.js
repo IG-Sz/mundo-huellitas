@@ -2,7 +2,7 @@ import { getCurrentUser, updateCurrentUser } from './authService';
 
 /**
  * Completa / edita perfil de refugio.
- * Backend: PUT /api/users/profile { ubicacion, telefono }
+ * Backend: PUT /api/users/profile { ubicacion, telefono, latitude, longitude }
  */
 export async function updateRefugioProfile(profileData) {
     return updateCurrentUser({

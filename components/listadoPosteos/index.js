@@ -5,10 +5,15 @@ import { useFocusEffect } from 'expo-router';
 import Posteo from '../posteo';
 import { getPosteos } from '../../services/posteos';
 import { getAnimales } from '../../services/animales';
+import {
+    listarRefugios,
+    resumenRefugiosParaFeed,
+} from '../../services/refugios';
 
 const ListadoPosteos = () => {
     const [posteos, setPosteos] = useState([]);
     const [animales, setAnimales] = useState([]);
+    const [refugios, setRefugios] = useState(new Map());
     const [busqueda, setBusqueda] = useState('');
     const [especieSeleccionada, setEspecieSeleccionada] = useState('Todas');
     const [edadSeleccionada, setEdadSeleccionada] = useState('Todas');
@@ -18,11 +23,18 @@ const ListadoPosteos = () => {
         useCallback(() => {
             let activo = true;
 
-            Promise.all([getPosteos(), getAnimales()])
-                .then(([posteosData, animalesData]) => {
+            Promise.all([getPosteos(), getAnimales(), listarRefugios()])
+                .then(([posteosData, animalesData, refugiosData]) => {
                     if (!activo) return;
                     setPosteos(posteosData);
                     setAnimales(animalesData);
+                    setRefugios(
+                        resumenRefugiosParaFeed(
+                            refugiosData,
+                            posteosData,
+                            animalesData
+                        )
+                    );
                 })
                 .catch((error) => {
                     console.log('Error al obtener posteos/animales:', error);
@@ -186,7 +198,17 @@ return (
                     (animal) => String(animal.id) === String(item.idAnimal)
                 );
 
-                return <Posteo posteo={item} animal={animal} />;
+                const refugioId = String(
+                    item.idUsuario || animal?.idUsuario || animal?.user_id || ''
+                );
+
+                return (
+                    <Posteo
+                        posteo={item}
+                        animal={animal}
+                        refugio={refugios.get(refugioId)}
+                    />
+                );
             }}
             keyExtractor={item => item.id.toString()}
             ListEmptyComponent={

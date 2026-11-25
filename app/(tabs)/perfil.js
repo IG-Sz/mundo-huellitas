@@ -2,10 +2,7 @@ import { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    KeyboardAvoidingView,
-    Platform,
     Pressable,
-    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -21,6 +18,8 @@ import {
     updateCurrentUser,
 } from '../../services/authService';
 import { validarTelefono } from '../../services/refugios';
+import { useFavoritos } from '../../context/favoritosContext';
+import FormularioScroll from '../../components/formularioScroll';
 
 const colors = {
     primary: '#795548',
@@ -33,6 +32,7 @@ const colors = {
 
 export default function PerfilAdoptante() {
     const router = useRouter();
+    const { recargarFavoritos } = useFavoritos();
 
     const [nombre, setNombre] = useState('');
     const [telefono, setTelefono] = useState('');
@@ -122,6 +122,7 @@ export default function PerfilAdoptante() {
                     style: 'destructive',
                     onPress: async () => {
                         await logoutUser();
+                        await recargarFavoritos();
                         router.replace('/login');
                     },
                 },
@@ -140,6 +141,7 @@ export default function PerfilAdoptante() {
                     style: 'destructive',
                     onPress: async () => {
                         await clearAllLocalData();
+                        await recargarFavoritos();
                         router.replace('/register');
                     },
                 },
@@ -158,15 +160,7 @@ export default function PerfilAdoptante() {
 
     return (
         <SafeAreaView edges={['top']} style={styles.container}>
-            <KeyboardAvoidingView
-                style={styles.flex}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            >
-                <ScrollView
-                    contentContainerStyle={styles.scrollContent}
-                    keyboardShouldPersistTaps="handled"
-                    showsVerticalScrollIndicator={false}
-                >
+            <FormularioScroll contentContainerStyle={styles.scrollContent}>
                     <Text style={styles.title}>Mi perfil</Text>
                     <Text style={styles.subtitle}>
                         Tus datos de adoptante.
@@ -232,8 +226,7 @@ export default function PerfilAdoptante() {
                             </Text>
                         </Pressable>
                     </View>
-                </ScrollView>
-            </KeyboardAvoidingView>
+            </FormularioScroll>
         </SafeAreaView>
     );
 }

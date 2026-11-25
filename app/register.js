@@ -3,10 +3,7 @@ import { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    KeyboardAvoidingView,
-    Platform,
     Pressable,
-    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -16,6 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { registerUser } from '../services/authService';
+import { useFavoritos } from '../context/favoritosContext';
+import FormularioScroll from '../components/formularioScroll';
 import { validarTelefono } from '../services/refugios';
 
 const colors = {
@@ -28,6 +27,7 @@ const colors = {
 
 const Registro = () => {
     const router = useRouter();
+    const { recargarFavoritos } = useFavoritos();
 
     const [nombre, setNombre] = useState('');
     const [email, setEmail] = useState('');
@@ -103,6 +103,8 @@ const Registro = () => {
                 rol,
             });
 
+            await recargarFavoritos();
+
             const destino =
                 rol === 'refugio'
                 ? '/(refugio)/posteos'
@@ -136,15 +138,7 @@ const Registro = () => {
             <Stack.Screen options={{ headerShown: false }} />
 
             <SafeAreaView style={styles.container}>
-                <KeyboardAvoidingView
-                    style={{ flex: 1 }}
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                >
-                    <ScrollView
-                        contentContainerStyle={styles.scrollContent}
-                        keyboardShouldPersistTaps="handled"
-                        showsVerticalScrollIndicator={false}
-                    >
+                <FormularioScroll contentContainerStyle={styles.scrollContent}>
                         <View style={styles.header}>
                             <View style={styles.logo}>
                                 <Ionicons
@@ -426,8 +420,7 @@ const Registro = () => {
                         <Text style={styles.pie}>
                             Hecho con ❤️ para quienes aman a los animales.
                         </Text>
-                    </ScrollView>
-                </KeyboardAvoidingView>
+                </FormularioScroll>
             </SafeAreaView>
         </>
     );

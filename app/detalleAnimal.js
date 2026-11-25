@@ -16,17 +16,14 @@ import {
 } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import {
-    getAnimalById,
-    marcarAnimalAdoptado,
-} from '../services/animales';
-import { getCurrentUser } from '../services/authService';
+import { getAnimalById } from '../services/animales';
 import {
     getInfoRefugio,
     normalizarTelefonoWhatsApp,
 } from '../services/refugios';
 import SelloAdoptado from '../components/selloAdoptado';
 import MapaRefugio from '../components/mapaRefugio';
+import { resumirUbicacionVisible } from '../services/ubicacion';
 
 const colors = {
     primary: '#795548',
@@ -45,26 +42,15 @@ const DetalleAnimal = () => {
 
     const [animal, setAnimal] = useState(null);
     const [refugio, setRefugio] = useState(null);
-    const [esDueno, setEsDueno] = useState(false);
+    const [ubicacionVisible, setUbicacionVisible] = useState('');
     const [cargando, setCargando] = useState(true);
-    const [marcando, setMarcando] = useState(false);
 
     useEffect(() => {
         const cargarAnimal = async () => {
             try {
-                const [animalEncontrado, usuario] = await Promise.all([
-                    getAnimalById(String(idAnimal)),
-                    getCurrentUser(),
-                ]);
+                const animalEncontrado = await getAnimalById(String(idAnimal));
 
                 setAnimal(animalEncontrado);
-                setEsDueno(
-                    Boolean(
-                        usuario?.id &&
-                            String(animalEncontrado?.idUsuario) ===
-                                String(usuario.id)
-                    )
-                );
 
                 if (animalEncontrado) {
                     const info = await getInfoRefugio(
@@ -83,39 +69,30 @@ const DetalleAnimal = () => {
         cargarAnimal();
     }, [idAnimal]);
 
-    const handleMarcarAdoptado = () => {
-        if (!animal || !esDueno) return;
+    useEffect(() => {
+        let activo = true;
 
-        Alert.alert(
-            'Marcar como adoptado',
-            `¿Confirmás que ${animal.nombre} ya fue adoptado?`,
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Confirmar',
-                    onPress: async () => {
-                        try {
-                            setMarcando(true);
-                            const usuario = await getCurrentUser();
-                            const actualizado = await marcarAnimalAdoptado(
-                                animal.id,
-                                usuario.id
-                            );
-                            setAnimal(actualizado);
-                        } catch (error) {
-                            Alert.alert(
-                                'Error',
-                                error.message ||
-                                    'No se pudo marcar como adoptado.'
-                            );
-                        } finally {
-                            setMarcando(false);
-                        }
-                    },
-                },
-            ]
-        );
-    };
+        const acortar = async () => {
+            if (!refugio) {
+                setUbicacionVisible('');
+                return;
+            }
+
+            const texto = await resumirUbicacionVisible({
+                ubicacion: refugio.ubicacion,
+                latitude: refugio.latitude,
+                longitude: refugio.longitude,
+            });
+
+            if (activo) setUbicacionVisible(texto);
+        };
+
+        acortar();
+
+        return () => {
+            activo = false;
+        };
+    }, [refugio]);
 
     const contactarWhatsApp = async () => {
         const telefono = normalizarTelefonoWhatsApp(refugio?.telefono);
@@ -255,31 +232,28 @@ const DetalleAnimal = () => {
                             </Text>
 
                             <Text style={styles.descripcion}>
-                                Publicado por{' '}
+                                Publicado por el refugio{' '}
                                 <Text style={styles.refugioNombre}>
                                     {refugio?.nombre ||
                                         animal.nombreRefugio ||
                                         'Refugio'}
                                 </Text>
-                                .
                             </Text>
 
                             <Text style={styles.publicaciones}>
-                                {refugio?.cantidadPublicaciones ??
-                                    animal.cantidadPublicaciones ??
-                                    0}{' '}
-                                {(refugio?.cantidadPublicaciones ??
-                                    animal.cantidadPublicaciones ??
-                                    0) === 1
-                                    ? 'publicación'
-                                    : 'publicaciones'}{' '}
-                                activas
+                                {refugio?.cantidadPublicaciones ?? 0}{' '}
+                                {(refugio?.cantidadPublicaciones ?? 0) === 1
+                                    ? 'publicación activa'
+                                    : 'publicaciones activas'}
                             </Text>
 
-                            <View style={styles.mapaSeccion}>
-                                <Text style={styles.tituloSeccion}>
-                                    Ubicación
+                            {ubicacionVisible ? (
+                                <Text style={styles.ubicacion}>
+                                    {ubicacionVisible}
                                 </Text>
+                            ) : null}
+
+                            <View style={styles.mapaSeccion}>
                                 <MapaRefugio
                                     latitude={refugio?.latitude}
                                     longitude={refugio?.longitude}
@@ -299,25 +273,6 @@ const DetalleAnimal = () => {
                         { paddingBottom: Math.max(insets.bottom, 12) + 8 },
                     ]}
                 >
-                    {esDueno && !animal.adoptado ? (
-                        <Pressable
-                            style={[
-                                styles.adoptadoButton,
-                                marcando && styles.buttonDisabled,
-                            ]}
-                            onPress={handleMarcarAdoptado}
-                            disabled={marcando}
-                        >
-                            {marcando ? (
-                                <ActivityIndicator color="#FFFFFF" />
-                            ) : (
-                                <Text style={styles.adoptadoButtonText}>
-                                    Marcar como adoptado
-                                </Text>
-                            )}
-                        </Pressable>
-                    ) : null}
-
                     {!animal.adoptado ? (
                         <Pressable
                             style={styles.whatsappButton}
@@ -440,9 +395,14 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: colors.secondary,
     },
+    ubicacion: {
+        marginTop: 8,
+        fontSize: 15,
+        color: colors.primary,
+        lineHeight: 22,
+    },
     mapaSeccion: {
-        marginTop: 20,
-        gap: 10,
+        marginTop: 12,
     },
     footer: {
         backgroundColor: colors.background,

@@ -1,6 +1,15 @@
 /**
  * Normaliza IDs que vienen de MongoDB (_id / ObjectId / { $oid }).
  */
+export function toCoord(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim() !== '') {
+        const numero = Number(value);
+        if (Number.isFinite(numero)) return numero;
+    }
+    return null;
+}
+
 export function normalizeId(value) {
     if (value == null) return null;
     if (typeof value === 'string') return value;
@@ -32,6 +41,8 @@ export function normalizeUser(user) {
         telefono: user.telefono || '',
         ubicacion: user.ubicacion || user.direccion || '',
         direccion: user.direccion || user.ubicacion || '',
+        latitude: toCoord(user.latitude),
+        longitude: toCoord(user.longitude),
     };
 }
 

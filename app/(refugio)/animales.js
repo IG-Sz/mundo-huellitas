@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     FlatList,
     Image,
     Pressable,
@@ -12,7 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 
-import { getMisAnimales } from '../../services/animales';
+import { getMisPosteos } from '../../services/posteos';
+import { getMisAnimales, marcarAnimalAdoptado } from '../../services/animales';
 import { getCurrentUser } from '../../services/authService';
 
 const colors = {
@@ -26,7 +28,7 @@ const colors = {
 
 export default function AnimalesRefugio() {
     const router = useRouter();
-    const [animales, setAnimales] = useState([]);
+    const [items, setItems] = useState([]);
     const [cargando, setCargando] = useState(true);
     const [error, setError] = useState('');
     const [reloadKey, setReloadKey] = useState(0);
@@ -46,14 +48,30 @@ export default function AnimalesRefugio() {
                         return;
                     }
 
-                    const lista = await getMisAnimales();
-                    if (activo) setAnimales(lista);
+                    const [posteos, animales] = await Promise.all([
+                        getMisPosteos(),
+                        getMisAnimales(),
+                    ]);
+
+                    if (!activo) return;
+
+                    setItems(
+                        posteos.map((posteo) => ({
+                            posteo,
+                            animal: animales.find(
+                                (animal) =>
+                                    String(animal.id) ===
+                                    String(posteo.idAnimal)
+                            ),
+                        }))
+                    );
                 } catch (err) {
-                    console.log('Error al cargar animales:', err);
+                    console.log('Error al cargar mis publicaciones:', err);
                     if (activo) {
-                        setAnimales([]);
+                        setItems([]);
                         setError(
-                            err.message || 'No se pudieron cargar los animales.'
+                            err.message ||
+                                'No se pudieron cargar tus publicaciones.'
                         );
                     }
                 } finally {
@@ -69,11 +87,36 @@ export default function AnimalesRefugio() {
         }, [router, reloadKey])
     );
 
+    const marcarAdoptado = (animal) => {
+        Alert.alert(
+            'Marcar como adoptada',
+            `¿Confirmás que ${animal.nombre} ya fue adoptada?`,
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                    text: 'Confirmar',
+                    onPress: async () => {
+                        try {
+                            await marcarAnimalAdoptado(animal.id);
+                            setReloadKey((k) => k + 1);
+                        } catch (err) {
+                            Alert.alert(
+                                'Error',
+                                err.message ||
+                                    'No se pudo marcar como adoptada.'
+                            );
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
     if (cargando) {
         return (
             <SafeAreaView style={styles.centrado}>
                 <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={styles.mensaje}>Cargando animales...</Text>
+                <Text style={styles.mensaje}>Cargando tus publicaciones...</Text>
             </SafeAreaView>
         );
     }
@@ -82,7 +125,7 @@ export default function AnimalesRefugio() {
         <SafeAreaView edges={['top']} style={styles.container}>
             <Text style={styles.title}>Mis animales</Text>
             <Text style={styles.subtitle}>
-                Animales registrados de tu refugio
+                Publicaciones de los animales de tu refugio
             </Text>
 
             {error ? (
@@ -97,8 +140,8 @@ export default function AnimalesRefugio() {
                 </View>
             ) : (
                 <FlatList
-                    data={animales}
-                    keyExtractor={(item) => String(item.id)}
+                    data={items}
+                    keyExtractor={(item) => String(item.posteo.id)}
                     contentContainerStyle={styles.lista}
                     ListEmptyComponent={
                         <View style={styles.vacio}>
@@ -108,53 +151,90 @@ export default function AnimalesRefugio() {
                                 color={colors.secondary}
                             />
                             <Text style={styles.vacioTitulo}>
-                                No hay animales cargados
+                                Todavía no publicaste animales
                             </Text>
                             <Text style={styles.vacioTexto}>
-                                Tocá el + para dar de alta el primero.
+                                Tocá el + para crear la primera publicación.
                             </Text>
                         </View>
                     }
-                    renderItem={({ item }) => (
-                        <View style={styles.card}>
-                            <Image
-                                source={{ uri: item.imagen }}
-                                style={styles.image}
-                                resizeMode="cover"
-                            />
-                            <View style={styles.cardBody}>
-                                <View style={styles.row}>
-                                    <Text style={styles.nombre}>
-                                        {item.nombre}
+                    renderItem={({ item }) => {
+                        const animalId =
+                            item.animal?.id || item.posteo.idAnimal;
+
+                        return (
+                            <View style={styles.card}>
+                                {item.posteo.imagen ? (
+                                    <Image
+                                        source={{ uri: item.posteo.imagen }}
+                                        style={styles.image}
+                                        resizeMode="cover"
+                                    />
+                                ) : null}
+                                <View style={styles.cardBody}>
+                                    <Text style={styles.cardTitle}>
+                                        {item.posteo.titulo}
                                     </Text>
-                                    <View style={styles.badge}>
-                                        <Text style={styles.badgeText}>
-                                            {item.estado || 'En adopción'}
+                                    <Text
+                                        style={styles.cardText}
+                                        numberOfLines={3}
+                                    >
+                                        {item.posteo.texto}
+                                    </Text>
+                                    <Text style={styles.cardMeta}>
+                                        {item.animal
+                                            ? `${item.animal.nombre} · ${item.animal.especie}`
+                                            : 'Animal publicado'}
+                                        {item.animal?.adoptado
+                                            ? ' · Adoptada'
+                                            : ''}
+                                    </Text>
+                                    <Pressable
+                                        style={styles.editarBtn}
+                                        onPress={() =>
+                                            router.push({
+                                                pathname:
+                                                    '/(refugio)/editar-posteo',
+                                                params: { id: item.posteo.id },
+                                            })
+                                        }
+                                    >
+                                        <Text style={styles.botonTexto}>
+                                            Editar publicación
                                         </Text>
-                                    </View>
+                                    </Pressable>
+                                    <Pressable
+                                        style={styles.adoptadoBtn}
+                                        disabled={
+                                            Boolean(item.animal?.adoptado) ||
+                                            !animalId
+                                        }
+                                        onPress={() =>
+                                            marcarAdoptado({
+                                                id: animalId,
+                                                nombre:
+                                                    item.animal?.nombre ||
+                                                    'esta mascota',
+                                            })
+                                        }
+                                    >
+                                        <Text style={styles.botonTexto}>
+                                            {item.animal?.adoptado
+                                                ? 'Ya está adoptada'
+                                                : 'Marcar como adoptada'}
+                                        </Text>
+                                    </Pressable>
                                 </View>
-                                <Text style={styles.meta}>
-                                    {item.especie}
-                                    {item.raza ? ` · ${item.raza}` : ''}
-                                </Text>
-                                <Text style={styles.meta}>
-                                    {item.sexo}
-                                    {typeof item.edad === 'number'
-                                        ? ` · ${item.edad} ${
-                                              item.edad === 1 ? 'año' : 'años'
-                                          }`
-                                        : ''}
-                                </Text>
                             </View>
-                        </View>
-                    )}
+                        );
+                    }}
                 />
             )}
 
             <Pressable
                 style={styles.fab}
-                onPress={() => router.push('/(refugio)/nuevo-animal')}
-                accessibilityLabel="Cargar nuevo animal"
+                onPress={() => router.push('/(refugio)/nuevo-posteo')}
+                accessibilityLabel="Nueva publicación"
             >
                 <Ionicons name="add" size={28} color="#FFFFFF" />
             </Pressable>
@@ -247,47 +327,50 @@ const styles = StyleSheet.create({
         marginVertical: 8,
         borderWidth: 1,
         borderColor: colors.soft,
-        flexDirection: 'row',
-        minHeight: 110,
     },
     image: {
-        width: 110,
-        height: '100%',
-        minHeight: 110,
+        width: '100%',
+        height: 160,
         backgroundColor: colors.soft,
     },
     cardBody: {
-        flex: 1,
-        padding: 12,
-        justifyContent: 'center',
-        gap: 4,
+        padding: 14,
+        gap: 6,
     },
-    row: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 8,
-    },
-    nombre: {
-        flex: 1,
+    cardTitle: {
         fontSize: 17,
         fontWeight: 'bold',
         color: colors.primary,
     },
-    badge: {
-        backgroundColor: colors.soft,
-        borderRadius: 10,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
+    cardText: {
+        fontSize: 14,
+        color: colors.secondary,
+        lineHeight: 20,
     },
-    badgeText: {
-        fontSize: 11,
+    cardMeta: {
+        fontSize: 13,
         color: colors.primary,
         fontWeight: '600',
+        marginTop: 4,
     },
-    meta: {
-        fontSize: 13,
-        color: colors.secondary,
+    editarBtn: {
+        marginTop: 10,
+        backgroundColor: colors.primary,
+        borderRadius: 12,
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    adoptadoBtn: {
+        marginTop: 8,
+        backgroundColor: colors.accent,
+        borderRadius: 12,
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    botonTexto: {
+        color: '#FFFFFF',
+        fontWeight: 'bold',
+        fontSize: 15,
     },
     fab: {
         position: 'absolute',

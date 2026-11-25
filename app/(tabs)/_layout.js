@@ -1,6 +1,8 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useGuardaRol } from '../../components/guardaRol';
+
 const COLORS = {
     primary: '#795548',
     inactive: '#A99A8F',
@@ -27,6 +29,9 @@ const getIcon = (routeName, color, size) => {
 };
 
 export default function TabsLayout() {
+    const guarda = useGuardaRol('adoptante');
+    if (guarda) return guarda;
+
     return (
         <Tabs
             initialRouteName="posteos"

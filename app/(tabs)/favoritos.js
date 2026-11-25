@@ -18,8 +18,8 @@ export default function Favoritos() {
         });
     }, []);
 
-    const animalesFavoritos = animales.filter(
-        animal => favoritos.includes(animal.id)
+    const animalesFavoritos = animales.filter((animal) =>
+        favoritos.some((id) => String(id) === String(animal.id))
     );
 
     return (

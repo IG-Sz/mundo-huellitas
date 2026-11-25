@@ -83,13 +83,12 @@ export async function eliminarAnimal(id) {
 }
 
 /**
- * El backend actual no tiene campo adoptado/estado.
- * Se deja para no romper detalleAnimal; avisa claramente.
+ * PUT /api/animales/:id { adoptado: true }
+ * Solo el refugio dueño puede actualizarlo.
  */
-export async function marcarAnimalAdoptado() {
-    throw new Error(
-        'El backend todavía no soporta marcar animales como adoptados.'
-    );
+export async function marcarAnimalAdoptado(id) {
+    await actualizarAnimal(id, { adoptado: true });
+    return getAnimalById(id);
 }
 
 // Compat: nombres viejos usados en otras pantallas

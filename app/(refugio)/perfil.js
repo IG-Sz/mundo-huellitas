@@ -2,10 +2,7 @@ import { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    KeyboardAvoidingView,
-    Platform,
     Pressable,
-    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -23,6 +20,8 @@ import {
 import { validarTelefono } from '../../services/refugios';
 import { resolverCoordenadas } from '../../services/ubicacion';
 import DireccionAutocomplete from '../../components/direccionAutocomplete';
+import { useFavoritos } from '../../context/favoritosContext';
+import FormularioScroll from '../../components/formularioScroll';
 import MapaRefugio from '../../components/mapaRefugio';
 
 const colors = {
@@ -37,6 +36,7 @@ const colors = {
 
 export default function PerfilRefugio() {
     const router = useRouter();
+    const { recargarFavoritos } = useFavoritos();
 
     const [nombre, setNombre] = useState('');
     const [telefono, setTelefono] = useState('');
@@ -139,8 +139,6 @@ export default function PerfilRefugio() {
                 setDireccion(coords.direccion);
             }
 
-            // Backend PUT /api/users/profile solo persiste ubicacion + telefono.
-            // nombre y coords se guardan en SecureStore para la UI local.
             await updateCurrentUser({
                 nombre: nombre.trim(),
                 telefono: telefono.trim(),
@@ -189,6 +187,7 @@ export default function PerfilRefugio() {
                     style: 'destructive',
                     onPress: async () => {
                         await logoutUser();
+                        await recargarFavoritos();
                         router.replace('/login');
                     },
                 },
@@ -207,6 +206,7 @@ export default function PerfilRefugio() {
                     style: 'destructive',
                     onPress: async () => {
                         await clearAllLocalData();
+                        await recargarFavoritos();
                         router.replace('/register');
                     },
                 },
@@ -225,15 +225,7 @@ export default function PerfilRefugio() {
 
     return (
         <SafeAreaView edges={['top']} style={styles.container}>
-            <KeyboardAvoidingView
-                style={styles.flex}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            >
-                <ScrollView
-                    contentContainerStyle={styles.scrollContent}
-                    keyboardShouldPersistTaps="handled"
-                    showsVerticalScrollIndicator={false}
-                >
+            <FormularioScroll contentContainerStyle={styles.scrollContent}>
                     <Text style={styles.title}>Mi perfil</Text>
                     <Text style={styles.subtitle}>
                         Editá los datos de contacto de tu refugio.
@@ -330,8 +322,7 @@ export default function PerfilRefugio() {
                             </Text>
                         </Pressable>
                     </View>
-                </ScrollView>
-            </KeyboardAvoidingView>
+            </FormularioScroll>
         </SafeAreaView>
     );
 }

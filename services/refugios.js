@@ -1,32 +1,57 @@
+import { apiRequest } from './api';
 import { getAnimales } from './animales';
-import { getCurrentUser, getUserById } from './authService';
-import { normalizeId } from './normalize';
+import { getCurrentUser } from './authService';
+import { normalizeId, toCoord } from './normalize';
 import { getPosteos } from './posteos';
 
-// Centro por defecto solo para la cámara del mapa (no es un refugio fake)
-const UBICACION_DEFAULT = {
-    latitude: -34.6037,
-    longitude: -58.3816,
-    latitudeDelta: 0.08,
-    longitudeDelta: 0.08,
+const coordsValidas = (latitude, longitude) =>
+    typeof latitude === 'number' &&
+    Number.isFinite(latitude) &&
+    typeof longitude === 'number' &&
+    Number.isFinite(longitude);
+
+const normalizarRefugio = (refugio) => {
+    const id = normalizeId(refugio?.id ?? refugio?._id);
+
+    return {
+        id,
+        nombre: refugio?.nombre || 'Refugio',
+        telefono: refugio?.telefono || '',
+        ubicacion: refugio?.ubicacion || refugio?.direccion || '',
+        latitude: toCoord(refugio?.latitude),
+        longitude: toCoord(refugio?.longitude),
+    };
 };
 
-const contarPublicaciones = async (idUsuario) => {
-    const posteos = await getPosteos();
+const contarPorUsuario = (lista, idUsuario, soloDisponibles = false) => {
     const id = normalizeId(idUsuario);
-    return posteos.filter(
-        (posteo) => normalizeId(posteo.idUsuario || posteo.user_id) === id
-    ).length;
+
+    return lista.filter((item) => {
+        const mismoUsuario =
+            normalizeId(item.idUsuario || item.user_id) === id;
+        if (!mismoUsuario) return false;
+        if (soloDisponibles && item.adoptado) return false;
+        return true;
+    }).length;
 };
 
-const contarAnimalesDisponibles = async (idUsuario) => {
-    const animales = await getAnimales();
+/** Publicaciones cuyo animal no está adoptado. */
+const contarPublicacionesActivas = (posteos, animales, idUsuario) => {
     const id = normalizeId(idUsuario);
-    return animales.filter(
-        (animal) =>
-            normalizeId(animal.idUsuario || animal.user_id) === id &&
-            !animal.adoptado
-    ).length;
+    const adoptados = new Set(
+        animales
+            .filter((animal) => animal.adoptado)
+            .map((animal) => normalizeId(animal.id))
+    );
+
+    return posteos.filter((posteo) => {
+        if (normalizeId(posteo.idUsuario || posteo.user_id) !== id) {
+            return false;
+        }
+
+        const animalId = normalizeId(posteo.idAnimal || posteo.animal_id);
+        return !adoptados.has(animalId);
+    }).length;
 };
 
 const normalizarTelefonoWhatsApp = (telefono) => {
@@ -48,11 +73,42 @@ const validarTelefono = (telefono) => {
 };
 
 /**
- * Info de un refugio sin datos de prueba.
- * - Si es el usuario logueado: usa SecureStore (perfil).
- * - Si no: solo contadores desde API; contacto/coords vacíos
- *   hasta que el backend exponga listado de refugios.
+ * Refugios públicos del backend. Si el usuario logueado ya tiene
+ * coordenadas en la sesión y el API todavía no, se usan esas.
  */
+const listarRefugios = async () => {
+    const data = await apiRequest('/api/users/refugios');
+    const lista = (Array.isArray(data) ? data : []).map(normalizarRefugio);
+    const sesion = await getCurrentUser();
+
+    if (!sesion || sesion.rol !== 'refugio' || !sesion.id) {
+        return lista;
+    }
+
+    const local = normalizarRefugio(sesion);
+    const idx = lista.findIndex((refugio) => refugio.id === local.id);
+
+    if (idx === -1) {
+        return coordsValidas(local.latitude, local.longitude)
+            ? [...lista, local]
+            : lista;
+    }
+
+    const remoto = lista[idx];
+    const tieneRemotas = coordsValidas(remoto.latitude, remoto.longitude);
+
+    lista[idx] = {
+        ...remoto,
+        nombre: remoto.nombre || local.nombre,
+        telefono: remoto.telefono || local.telefono,
+        ubicacion: remoto.ubicacion || local.ubicacion,
+        latitude: tieneRemotas ? remoto.latitude : local.latitude,
+        longitude: tieneRemotas ? remoto.longitude : local.longitude,
+    };
+
+    return lista;
+};
+
 const getInfoRefugio = async (idUsuario, nombreFallback) => {
     if (!idUsuario) {
         return {
@@ -68,75 +124,80 @@ const getInfoRefugio = async (idUsuario, nombreFallback) => {
     }
 
     const id = normalizeId(idUsuario);
-    const [cantidadPublicaciones, animalesDisponibles, usuario] =
-        await Promise.all([
-            contarPublicaciones(id),
-            contarAnimalesDisponibles(id),
-            getUserById(id),
-        ]);
+    const [refugios, posteos, animales] = await Promise.all([
+        listarRefugios(),
+        getPosteos(),
+        getAnimales(),
+    ]);
+    const usuario = refugios.find((refugio) => refugio.id === id);
 
     return {
         id,
         nombre: usuario?.nombre || nombreFallback || 'Refugio',
         telefono: usuario?.telefono || '',
-        ubicacion: usuario?.ubicacion || usuario?.direccion || '',
-        latitude:
-            typeof usuario?.latitude === 'number' ? usuario.latitude : null,
-        longitude:
-            typeof usuario?.longitude === 'number' ? usuario.longitude : null,
-        cantidadPublicaciones,
-        animalesDisponibles,
+        ubicacion: usuario?.ubicacion || '',
+        latitude: usuario?.latitude ?? null,
+        longitude: usuario?.longitude ?? null,
+        cantidadPublicaciones: contarPublicacionesActivas(
+            posteos,
+            animales,
+            id
+        ),
+        animalesDisponibles: contarPorUsuario(animales, id, true),
     };
 };
 
 /**
- * Refugios para el mapa: IDs reales de animales/posteos del backend.
- * Solo pins con coordenadas conocidas (perfil del usuario logueado).
+ * Nombre y publicaciones activas de cada refugio, para las tarjetas del feed.
+ * La API de posteos no manda esos datos.
  */
-const getRefugiosParaMapa = async () => {
-    const [animales, posteos, sesion] = await Promise.all([
-        getAnimales(),
-        getPosteos(),
-        getCurrentUser(),
-    ]);
+const resumenRefugiosParaFeed = (refugios, posteos, animales) => {
+    const resumen = new Map();
 
-    const ids = new Set();
-
-    animales.forEach((animal) => {
-        const id = normalizeId(animal.user_id || animal.idUsuario);
-        if (id) ids.add(id);
-    });
-
-    posteos.forEach((posteo) => {
-        const id = normalizeId(posteo.user_id || posteo.idUsuario);
-        if (id) ids.add(id);
-    });
-
-    if (
-        sesion?.rol === 'refugio' &&
-        sesion.id &&
-        typeof sesion.latitude === 'number' &&
-        typeof sesion.longitude === 'number'
-    ) {
-        ids.add(normalizeId(sesion.id));
+    for (const refugio of refugios) {
+        resumen.set(String(refugio.id), {
+            nombre: refugio.nombre,
+            cantidadPublicaciones: contarPublicacionesActivas(
+                posteos,
+                animales,
+                refugio.id
+            ),
+        });
     }
 
-    const refugios = await Promise.all(
-        [...ids].map((id) => getInfoRefugio(id))
-    );
+    return resumen;
+};
 
-    return refugios.filter(
-        (refugio) =>
-            typeof refugio.latitude === 'number' &&
-            typeof refugio.longitude === 'number'
-    );
+/**
+ * Pins del mapa: solo refugios con coordenadas reales del backend.
+ */
+const getRefugiosParaMapa = async () => {
+    const [refugios, posteos, animales] = await Promise.all([
+        listarRefugios(),
+        getPosteos(),
+        getAnimales(),
+    ]);
+
+    return refugios
+        .filter((refugio) =>
+            coordsValidas(refugio.latitude, refugio.longitude)
+        )
+        .map((refugio) => ({
+            ...refugio,
+            cantidadPublicaciones: contarPublicacionesActivas(
+                posteos,
+                animales,
+                refugio.id
+            ),
+            animalesDisponibles: contarPorUsuario(animales, refugio.id, true),
+        }));
 };
 
 export {
-    UBICACION_DEFAULT,
     getInfoRefugio,
     getRefugiosParaMapa,
-    contarPublicaciones,
+    listarRefugios,
+    resumenRefugiosParaFeed,
     normalizarTelefonoWhatsApp,
     validarTelefono,
 };

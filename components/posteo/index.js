@@ -13,9 +13,9 @@ const colors = {
     accent: '#C98276',
 };
 
-const Posteo = ({ posteo, animal }) => {
+const Posteo = ({ posteo, animal, refugio }) => {
     const { toggleFavorito, esFavorito } = useFavoritos();
-    
+
     const router = useRouter();
 
     const favorito = animal ? esFavorito(animal.id) : false;
@@ -92,18 +92,21 @@ const Posteo = ({ posteo, animal }) => {
                         </Text>
 
                         <Text style={styles.refugio}>
-                            {animal.nombreRefugio ||
+                            {refugio?.nombre ||
+                                animal.nombreRefugio ||
                                 posteo.nombreRefugio ||
                                 'Refugio'}
                             {' · '}
-                            {animal.cantidadPublicaciones ??
+                            {refugio?.cantidadPublicaciones ??
+                                animal.cantidadPublicaciones ??
                                 posteo.cantidadPublicaciones ??
                                 0}{' '}
-                            {(animal.cantidadPublicaciones ??
+                            {(refugio?.cantidadPublicaciones ??
+                                animal.cantidadPublicaciones ??
                                 posteo.cantidadPublicaciones ??
                                 0) === 1
-                                ? 'publicación'
-                                : 'publicaciones'}
+                                ? 'publicación activa'
+                                : 'publicaciones activas'}
                         </Text>
 
                         <Text style={styles.fecha}>

@@ -48,7 +48,7 @@ const DireccionAutocomplete = ({
 
         const texto = value?.trim() || '';
 
-        if (texto.length < 2) {
+        if (texto.length < 3) {
             setSugerencias([]);
             setMostrarLista(false);
             setBuscando(false);
@@ -76,7 +76,7 @@ const DireccionAutocomplete = ({
             } finally {
                 setBuscando(false);
             }
-        }, 300);
+        }, 800);
 
         return () => {
             if (debounceRef.current) {
@@ -132,8 +132,7 @@ const DireccionAutocomplete = ({
             </View>
 
             <Text style={styles.hint}>
-                Empezá a escribir para ver sugerencias. Si ya está cargada, no
-                se reabre sola.
+                Escribí al menos 3 letras y elegí una sugerencia.
             </Text>
 
             {error && editando ? (

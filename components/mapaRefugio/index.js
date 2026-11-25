@@ -9,8 +9,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { UBICACION_DEFAULT } from '../../services/refugios';
-
 const colors = {
     primary: '#795548',
     secondary: '#8A776B',
@@ -38,8 +36,8 @@ export function buildStaticMapUrl(lat, lng, width, height, delta = 0.012) {
     );
 }
 
-export function openExternalMap(lat, lng, label = 'Ubicación') {
-    const q = encodeURIComponent(`${lat},${lng} (${label})`);
+export function openExternalMap(lat, lng) {
+    const q = encodeURIComponent(`${lat},${lng}`);
     return Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${q}`);
 }
 
@@ -57,20 +55,24 @@ const MapaRefugio = ({
     const [fallo, setFallo] = useState(false);
     const [mapWidth, setMapWidth] = useState(600);
 
-    const lat =
-        typeof latitude === 'number' ? latitude : UBICACION_DEFAULT.latitude;
-    const lng =
-        typeof longitude === 'number' ? longitude : UBICACION_DEFAULT.longitude;
+    const tieneCoords =
+        typeof latitude === 'number' &&
+        Number.isFinite(latitude) &&
+        typeof longitude === 'number' &&
+        Number.isFinite(longitude);
+    const lat = tieneCoords ? latitude : null;
+    const lng = tieneCoords ? longitude : null;
 
     const mapHeight = Math.max(height - CAPTION_HEIGHT, 120);
 
-    const uri = useMemo(
-        () => buildStaticMapUrl(lat, lng, mapWidth * 2, mapHeight * 2),
-        [lat, lng, mapWidth, mapHeight]
-    );
+    const uri = useMemo(() => {
+        if (!tieneCoords) return null;
+        return buildStaticMapUrl(lat, lng, mapWidth * 2, mapHeight * 2);
+    }, [tieneCoords, lat, lng, mapWidth, mapHeight]);
 
     const abrirMapa = () => {
-        openExternalMap(lat, lng, nombre || 'Refugio').catch(() => {});
+        if (!tieneCoords) return;
+        openExternalMap(lat, lng).catch(() => {});
     };
 
     return (
@@ -82,7 +84,7 @@ const MapaRefugio = ({
             }}
         >
             <Pressable style={{ height: mapHeight }} onPress={abrirMapa}>
-                {!fallo ? (
+                {tieneCoords && uri && !fallo ? (
                     <Image
                         key={`arcgis-${lat}-${lng}-${mapWidth}`}
                         source={{ uri }}
@@ -100,25 +102,37 @@ const MapaRefugio = ({
                             color={colors.secondary}
                         />
                         <Text style={styles.fallbackText}>
-                            No se pudo cargar el mapa
+                            {tieneCoords
+                                ? 'No se pudo cargar el mapa'
+                                : 'Este refugio todavía no cargó su ubicación'}
                         </Text>
                     </View>
                 )}
 
-                <View pointerEvents="none" style={styles.pinWrap}>
-                    <Ionicons name="location" size={36} color={colors.pin} />
-                </View>
+                {tieneCoords ? (
+                    <View pointerEvents="none" style={styles.pinWrap}>
+                        <Ionicons
+                            name="location"
+                            size={36}
+                            color={colors.pin}
+                        />
+                    </View>
+                ) : null}
             </Pressable>
 
             <Pressable style={styles.captionRow} onPress={abrirMapa}>
                 <Text style={styles.caption} numberOfLines={1}>
-                    Tocá para abrir en Maps
+                    {tieneCoords
+                        ? 'Tocá para abrir en Maps'
+                        : 'Sin ubicación cargada'}
                 </Text>
-                <Ionicons
-                    name="open-outline"
-                    size={16}
-                    color={colors.primary}
-                />
+                {tieneCoords ? (
+                    <Ionicons
+                        name="open-outline"
+                        size={16}
+                        color={colors.primary}
+                    />
+                ) : null}
             </Pressable>
         </View>
     );
