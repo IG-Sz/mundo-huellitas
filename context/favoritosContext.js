@@ -7,7 +7,14 @@ import {
     quitarFavorito,
 } from '../services/favoritos';
 
-const favoritosContext = createContext();
+const favoritosVacios = {
+    favoritos: [],
+    toggleFavorito: async () => {},
+    esFavorito: () => false,
+    recargarFavoritos: async () => {},
+};
+
+const favoritosContext = createContext(favoritosVacios);
 
 const mismoId = (a, b) => String(a) === String(b);
 
@@ -64,5 +71,5 @@ export const FavoritosProvider = ({ children }) => {
 };
 
 export const useFavoritos = () => {
-    return useContext(favoritosContext);
+    return useContext(favoritosContext) ?? favoritosVacios;
 };

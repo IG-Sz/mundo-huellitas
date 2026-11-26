@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useFavoritos } from '../../hooks/useFavoritos';
+import { useFavoritos } from '../../context/favoritosContext';
 import { useRouter } from 'expo-router';
 import SelloAdoptado from '../selloAdoptado';
 
